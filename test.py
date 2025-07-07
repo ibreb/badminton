@@ -1,7 +1,5 @@
-from Env_class_court_step import Env  # 假设你的Env类在env.py中
-from rule_player import Player
-from datetime import datetime
-import os
+from env import Env
+from player import SamplePlayer
 import csv 
 
 def csv_to_env_history(csv_path):
@@ -70,10 +68,9 @@ def csv_to_env_history(csv_path):
     return history
 
 def main():
-    # 初始化部分不变
-    player0 = Player(0)
-    player1 = Player(1)
-    env = Env(player0, player1)
+    player0 = SamplePlayer(0)
+    player1 = SamplePlayer(1)
+    env = Env()
     state = env.reset()
     
     print("===== 比赛开始 =====")
@@ -81,9 +78,8 @@ def main():
     while True:
         print(f"\n当前比分：玩家 {env.score_player0} - {env.score_player1} 对手")
         
-        # 新增发球阶段重置
-        env.is_serve_phase = True  # 确保每分开始都是发球阶段
-        current_serve_player = env.current_player  # 记录当前发球方
+        env.is_serve_phase = True
+        current_serve_player = env.current_player
         
         round_done = False
         while not round_done:
@@ -103,6 +99,7 @@ def main():
                 print(f"Player {current_player} 回球到 {action[1]} 方式 {env.ACTIONS[action[0]]}")
             
             next_state, reward, done, info = env.step(action)
+            print(next_state)
             
             env.save_to_csv("match_recording.csv")
             
@@ -110,6 +107,7 @@ def main():
             state = next_state
             
             if done:
+                print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
                 # 关键修复：重置发球阶段和发球权
                 env.is_serve_phase = True  # 为下一分准备
                 env.current_player = info['losing_player']  # 失败方下一分继续发球？

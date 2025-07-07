@@ -1,61 +1,34 @@
-#2025-3-4修改了失误时的渲染代码,out\miss\hit net 都可以显示
-#修改了miss时候的错误判断
-#修改了换发球代码
-# Env_10_9 同代码，作为class被引用
-#修改为等比例真实场地 
 import numpy as np
 import os
 from gym import spaces
-from typing import Tuple, Literal, Dict, List
-from Opponent_9_17 import Opponent  # 您的对手类，如果需要可以取消注释
-import csv 
-from matplotlib.animation import FuncAnimation
-from rule_player import Player
-
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-
-plt.rcParams['font.family'] = 'Heiti TC'  # 替换为您选择的字体
+from typing import Tuple, Dict, List
+import csv
+from player import Player
+from visualize import Visualizer
 
 class Env:
 
-    def __init__(self, player0: Player, player1: Player):
-        # 定义状态索引常量（建议放在类中）
-        players = [player0, player1]
-        #self.serving_player = 0  # 当前发球方 (0:玩家, 1:对手)
+    def __init__(self):
         self.current_player = 0 # 当前击球球员
 
         self.is_serve_phase = True
         self.history = []
         self.state_history = [] #存储3个state状态
-        self.ACTIONS = ['发短球', '长球', '推球', '杀球', '挡小球', '平球', '放小球', '挑球', '切球', '发长球']
-        # self.max_iteration = max_iteration
-        self.state = (1, 1, 4, 1, 1, 1, 0, 0, 1)
-        self.count = 0
-        self.round_count = 0
-        #self.all = 0
-        #self.is_launch = True
-        # self.prev_player_coord = (1, 1)
-        self.shot_space = spaces.Discrete(11)
-        self.action_space = spaces.Tuple((
-            spaces.Discrete(11),
-            spaces.MultiDiscrete([6, 3]),
-            spaces.Discrete(3)
-        ))
-        self.observation_space = spaces.MultiDiscrete([3, 3, 3, 3, 6, 3, 3, 2])
-        self._max_episode_steps = 1000
-        #self.history = {}
-        self.end_reason = "success"
-        self.is_serve_phase = True
-        self.last_winner = None
+        self.ACTIONS = ['发球', '扣杀', '高远球', '网前球', '吊球', '平抽球', '挑球', '扑球', '挡网', '切球']
 
-        # 添加分数记录
+
+        self.end_reason = "success"
+
+        self.is_serve_phase = True
+
+        # 分数记录
         self.score_player0 = 0
         self.score_player1 = 0
         self.winning_score = 10  # 比赛结束的分数
 
     def reset(self):
         #重置发球
+        self.is_serve_phase = True
         player_pos = (1, 1)
         opponent_pos = (4, 1)
         if self.current_player == 0:
@@ -69,16 +42,11 @@ class Env:
         #self.prev_player_coord = player_pos
         # self.history = []
         self.end_reason = ""
-        self.round_count = 0  # 重置回合计数器
-
-
 
         # 重置分数
         # self.scores = [0, 0]
         # self.score_player0 = 0
         # self.score_player1 = 0
-
-        self.count = 0  # 重置计数器
 
         return self.state
 
@@ -258,6 +226,7 @@ class Env:
         self.history.append(step_record)
         self.state = next_state.copy()
         
+        print(self.state)
         
         return self.state, reward, done, step_info
     
@@ -346,18 +315,12 @@ class Env:
                     record["losing_player"]
                 ]
                 writer.writerow(row)
-    # Helper Methods
-    # def _generate_serve(self):
-    #     """生成发球动作参数"""
-    #     if self.current_player == 0:
-    #         # 玩家0发球到对方场地右侧（坐标[4,2]）
-    #         return ('短球', (4, 2), 1)  # (shot_type, landing_pos, height)
-    #     else:
-    #         # 玩家1发球到对方场地左侧（坐标[1,2]）
-    #         return ('短球', (1, 2), 1)
 
     def _check_shot_failure(self, action):
-        """简化的击球失败检查（根据动作类型返回预设结果）"""
+
+        # return current_player.result(action)
+
+        # """简化的击球失败检查（根据动作类型返回预设结果）"""
         shot_type = action[0]
         
         # 定义动作类型与结果的映射
@@ -383,23 +346,6 @@ class Env:
             return True
         else:
             return False
-
-    def _record_history(self, step: int, state: Tuple[int, int, int, int, int, int, int, int], action: Tuple[int, Tuple[int, int], int, str], next_state: Tuple[int, int, int, int, int, int, int, int], reward: int, failure_reason: str = "", losing_player: int = -1):
-        """
-        记录状态、动作、下一个状态和奖励的历史
-        """
-        self.history[step] = {
-            'state': state,
-            'action': action,
-            'next_state': next_state,
-            'reward': reward,
-            'score_player0': self.score_player0,
-            'score_player1': self.score_player1,
-            'failure_reason': failure_reason,
-            'losing_player': losing_player
-        }
-
-
 
     def save_history_to_csv(self, filename: str):
         """
@@ -430,197 +376,13 @@ class Env:
                     action_height = None
                 writer.writerow([step, *state, action_type, landing_x, landing_y, action_height, *next_state, reward, score_player0, score_player1, failure_reason, losing_player])
 
-
-    def animate_ball(self, history, end_reason):
-        fig, ax = plt.subplots(figsize=(12, 8))
-        
-        # 绘制羽毛球场地
-        # 场地外框
-
-        court = patches.Rectangle((0, 0), 6.1, 13.4, facecolor='#006400', alpha=0.3)  # 浅绿色
-    
-        ax.add_patch(court)
-        
-        # 双打底线(外线)
-        ax.plot([0, 6.1], [0, 0], 'black', linewidth=2)  # 下底线
-        ax.plot([0, 6.1], [13.4, 13.4], 'black', linewidth=2)  # 上底线
-
-        # 单打底线(内线)
-        ax.plot([0, 6.1], [0.46, 0.46], 'black', linewidth=1)  # 下场区单打底线
-        ax.plot([0, 6.1], [12.94, 12.94], 'black', linewidth=1)  # 上场区单打底线
-
-        # 单打边线
-        ax.plot([0.46, 0.46], [0, 13.4], 'black', linewidth=1)  # 左单打边线
-        ax.plot([5.64, 5.64], [0, 13.4], 'black', linewidth=1)  # 右单打边线
-
-        # 双打边线
-        ax.plot([0, 0], [0, 13.4], 'black', linewidth=2)  # 左双打边线
-        ax.plot([6.1, 6.1], [0, 13.4], 'black', linewidth=2)  # 右双打边线
-
-        # 网线 (在场地正中间)
-        ax.plot([0, 6.1], [6.7, 6.7], 'black', linewidth=2)
-
-        # 发球线 (T字形)
-        ax.plot([0, 6.1], [5.18, 5.18], 'black', linewidth=1)  # 下场区发球线
-        ax.plot([0, 6.1], [8.22, 8.22], 'black', linewidth=1)  # 上场区发球线
-
-        # 中间发球线
-        ax.plot([3.05, 3.05], [0, 5.18], 'black', linewidth=1)  # 下半场
-        ax.plot([3.05, 3.05], [8.22, 13.4], 'black', linewidth=1)  # 上半场
-
-        # 添加场地底色
-        court_color = patches.Rectangle((0, 0), 6.1, 13.4, facecolor='#D5E6F1', alpha=0.3)
-        ax.add_patch(court_color)
-        # 球员和球的初始化
-        player = ax.add_patch(patches.Circle((0, 0), 0.3, color='blue', label='Player 0 (Blue)', visible=False))
-        opponent = ax.add_patch(patches.Circle((0, 0), 0.3, color='red', label='Player 1 (Red)', visible=False))
-        ball = ax.add_patch(patches.Circle((0, 0), 0.15, color='yellow', edgecolor='black', visible=False))
-        
-        # 信息显示面板
-        info_box = patches.Rectangle((6.3, 5), 2, 7, facecolor='white', alpha=0.7)
-        ax.add_patch(info_box)
-        
-        action_text = ax.text(6.5, 10, '', fontsize=10)
-        reward_text = ax.text(6.5, 9, '', fontsize=10)
-        player_text = ax.text(6.5, 8, '', fontsize=10)
-        ball_height_text = ax.text(6.5, 7, '', fontsize=10)
-        score_text = ax.text(6.5, 11, '', fontsize=10, weight='bold')
-        failure_reason_text = ax.text(6.5, 6, '', fontsize=10, color='red',
-            bbox=dict(facecolor='white', edgecolor='red', boxstyle='round,pad=0.5'),
-            visible=False)
-
-    
-        def convert_coordinates(x, y, is_ball=False):
-            """
-            坐标转换函数
-            is_ball: True表示是球的坐标转换,允许出界; False表示是球员的坐标转换,限制在场地内
-            """
-            # 基础转换
-            court_x = 0.76 + y * ((5.34 - 0.76) / 2)
-            court_y = 12.64 - x * ((12.64 - 0.76) / 5)
-
-            if not is_ball:
-                # 球员坐标限制在场地内
-                court_x = max(0.76, min(5.34, court_x))
-                court_y = max(0.76, min(12.64, court_y))
-            else:
-                # 球的坐标允许出界
-                # 可以根据需要扩展显示范围
-                court_x = max(-1, min(7.1, court_x))  # 允许球出界1米
-                court_y = max(-1, min(14.4, court_y))  # 允许球出界1米
-
-            return court_x, court_y
-
-
-        def update(frame_data):
-            step, t = frame_data
-            
-            if step >= len(history):
-                return [ball, player, opponent, action_text, reward_text, 
-                    player_text, ball_height_text, failure_reason_text, score_text]
-                
-            current_state = history[step]['state']
-            next_state = history[step]['next_state']
-            action = history[step]['action']
-            reward = history[step]['reward']
-            score_player0 = history[step]['score_player0']
-            score_player1 = history[step]['score_player1']
-            failure_reason = history[step].get('failure_reason', "")
-            losing_player = history[step].get('losing_player', -1)
-
-            # 更新位置信息显示
-            if action is not None:
-                action_idx = action[0]
-                action_name = self.ACTIONS[action_idx] if action_idx < len(self.ACTIONS) else self.ACTIONS[-1]
-                action_text.set_text(f'Action: {action_name}')
-                reward_text.set_text(f'Reward: {reward}')
-                player_text.set_text(f'Current Player: {current_state[-1]}')
-                ball_height_text.set_text(f'Ball Height: {next_state[6]}')
-                score_text.set_text(f'Score - Player 0: {score_player0}\nPlayer 1: {score_player1}')
-
-            # 计算插值位置
-            player_x = (1 - t) * current_state[0] + t * next_state[0]
-            player_y = (1 - t) * current_state[1] + t * next_state[1]
-            opponent_x = (1 - t) * current_state[2] + t * next_state[2]
-            opponent_y = (1 - t) * current_state[3] + t * next_state[3]
-            ball_x = (1 - t) * current_state[4] + t * next_state[4]
-            ball_y = (1 - t) * current_state[5] + t * next_state[5]
-
-            # 转换为场地坐标
-            p_x, p_y = convert_coordinates(player_x, player_y, is_ball=False)
-            o_x, o_y = convert_coordinates(opponent_x, opponent_y, is_ball=False)
-            b_x, b_y = convert_coordinates(ball_x, ball_y, is_ball=True)
-
-            # 更新位置
-            player.set_visible(True)
-            player.set_center((p_x, p_y))
-            opponent.set_visible(True)
-            opponent.set_center((o_x, o_y))
-            ball.set_visible(True)
-            ball.set_center((b_x, b_y))
-
-            # 显示失误信息
-            if failure_reason and t >= 1.0:
-                failure_reason_text.set_text(f'Player {losing_player}\nlose: {failure_reason}')
-                failure_reason_text.set_visible(True)
-            else:
-                failure_reason_text.set_visible(False)
-
-            return [ball, player, opponent, action_text, reward_text, 
-                    player_text, ball_height_text, failure_reason_text, score_text]
-
-        # # 设置图形范围和属性
-        # ax.set_xlim(-0.5, 8)
-        # ax.set_ylim(-0.5, 14)
-        # ax.set_aspect('equal')
-        # ax.axis('off')
-        # 设置图形范围和属性
-        ax.set_xlim(-2, 8.5)
-        ax.set_ylim(-2, 16)
-        ax.set_aspect('equal')
-        ax.axis('off')  
-        # 添加图例和标注
-        legend_elements = [
-            patches.Patch(color='blue', label='Player 0 (Blue)'),
-            patches.Patch(color='red', label='Player 1 (Red)'),
-            # patches.Patch(facecolor='none', edgecolor='black', linewidth=2, label='Double Court'),
-            # patches.Patch(facecolor='none', edgecolor='black', linewidth=1, label='Single Court')
-        ]
-        ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.2, 1))
-
-
-        # 创建动画
-        fps = 10
-        animate_frames_per_step = 10
-        pause_frames = fps * 2
-        
-        total_frames = []
-        for step in range(len(history)):
-            for f in range(animate_frames_per_step):
-                total_frames.append((step, f / animate_frames_per_step))
-            
-            failure_reason = history[step].get('failure_reason', "")
-            if failure_reason and failure_reason != "success":
-                for f in range(pause_frames):
-                    total_frames.append((step, 1.0))
-        
-        ani = FuncAnimation(fig, update, frames=total_frames, blit=False, 
-                        repeat=False, interval=1000/fps)
-        
-        plt.show()
-
-
-
-
     def render(self):
         """
         渲染击打过程
         """
-        try:
-            self.animate_ball(self.history, self.end_reason)
-        except Exception as e:
-            print(f"An error occurred during rendering: {e}")
-
-    
-
-
+        # try:
+        # visualizer = Visualizer(self.history, self.end_reason, self.ACTIONS)
+        # visualizer.run()
+        Visualizer.animate_ball(self.history, self.end_reason, self.ACTIONS)
+        # except Exception as e:
+        #     print(f"An error occurred during rendering: {e}")
