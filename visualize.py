@@ -3,7 +3,7 @@ import math
 
 class Visualizer:
     @staticmethod
-    def animate_ball(history, end_reason, ACTIONS):
+    def animate(history, ACTIONS):
         pygame.init()
         screen_width, screen_height = 1200, 800
         screen = pygame.display.set_mode((screen_width, screen_height))
@@ -152,7 +152,7 @@ class Visualizer:
             opponent_x = (1 - t) * current_state[2] + t * next_state[2]
             opponent_y = (1 - t) * current_state[3] + t * next_state[3]
             if losing_player != -1:
-                if (losing_player == 0) ^ (failure_reason == '对手落地致胜'):
+                if (losing_player == 0) ^ (failure_reason == '击球落地'):
                     opponent_x = (1 - t0) * current_state[2] + t0 * next_state[4]
                     opponent_y = (1 - t0) * current_state[3] + t0 * next_state[5]
                 else:
