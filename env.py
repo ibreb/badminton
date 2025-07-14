@@ -1,3 +1,4 @@
+import numpy as np
 from player import Player
 from visualize import Visualizer
 
@@ -36,7 +37,9 @@ class Env:
 
     def step(self, action):
         _, landing_pos, hit_height = action
+        print(self.score)
         player_id = self.current_player
+
         opponent_id = 1 - player_id
         obs = self._get_obs()
 
@@ -44,14 +47,14 @@ class Env:
         done = False
 
         info = {
-            'failure_reason': 'success',
+            'failure_reason': '成功',
             'losing_player': -1,
             'action': action,
             'current_player': player_id
         }
 
-        result = self.players[player_id].result(obs, action)
-        if result != 'success':  # 出界或下网
+        result = self.players[player_id].result(obs)
+        if result != '成功':  # 出界或下网
             reward = -1
             done = True
 
@@ -66,7 +69,8 @@ class Env:
                 landing_pos = (5, 3) if player_id == 0 else (0, -1)
 
         else:
-            hit = self.players[opponent_id].hit(obs, action)
+            hit = self.players[opponent_id].hit(obs)
+            print(self.score, hit)
             if not hit:
                 reward = 1
                 done = True

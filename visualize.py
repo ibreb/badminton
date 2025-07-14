@@ -8,7 +8,7 @@ class Visualizer:
         screen_width, screen_height = 1200, 800
         screen = pygame.display.set_mode((screen_width, screen_height))
         FONT = pygame.font.SysFont('simhei', 16)
-        pygame.display.set_caption("Badminton Visualizer")
+        pygame.display.set_caption('Badminton Visualizer')
         clock = pygame.time.Clock()
         FPS = 10
 
@@ -73,8 +73,8 @@ class Visualizer:
         for step in range(len(history)):
             for f in range(animate_fps):
                 total_frames.append((step, f / animate_fps))
-            failure_reason = history[step].get('failure_reason', "")
-            if failure_reason and failure_reason != "success":
+            failure_reason = history[step].get('failure_reason', '')
+            if failure_reason and failure_reason != '成功':
                 for f in range(pause_frames):
                     total_frames.append((step, 1.0))
 
@@ -143,7 +143,7 @@ class Visualizer:
             reward = history[step]['reward']
             score_player0 = history[step]['score_player0']
             score_player1 = history[step]['score_player1']
-            failure_reason = history[step].get('failure_reason', "")
+            failure_reason = history[step].get('failure_reason', '')
             losing_player = history[step].get('losing_player', -1)
             t0 = t * 0.6
 
