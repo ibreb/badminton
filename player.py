@@ -1,5 +1,7 @@
 import random
 import numpy as np
+import torch
+import torch.nn.functional as F
 
 class Player:
     """玩家基类，定义统一接口"""
@@ -44,7 +46,7 @@ class SamplePlayer(Player):
     def result(self, obs):
         return random.choices(
             ['成功', '出界', '下网'],
-            weights=[60, 20, 20],
+            weights=[80, 10, 10],
             k=1
         )[0]
 
@@ -67,19 +69,39 @@ class DLPlayer(Player):
     def serve(self, obs) -> tuple:
         ty, landing_pos, hit_height = self.act_model.predict(obs)
         if self.player_id == 0:
-            landing_pos = np.clip(landing_pos, [2.6, 1.1], [4.9, 1.9])
+            landing_pos = (4, 2)  # np.clip(landing_pos, [2.6, 1.1], [4.9, 1.9])
         else:
-            landing_pos = np.clip(landing_pos, [0.1, 0.1], [2.4, 0.9])
+            landing_pos = (1, 0)  # np.clip(landing_pos, [0.1, 0.1], [2.4, 0.9])
 
         return (ty, landing_pos, hit_height)
 
     def generate_shot(self, obs) -> tuple:
-        ty, landing_pos, hit_height = self.act_model.predict(obs)
+        ty, landing_pos_idx, hit_height = self.act_model.predict(obs)
+        
         if self.player_id == 0:
-            landing_pos = np.clip(landing_pos, [2.6, 0.1], [4.9, 1.9])
+            landing_pos = [
+                (2.9166666666666665, 0.3333333333333333),
+                (2.9166666666666665, 1.0),
+                (2.9166666666666665, 1.6666666666666667),
+                (3.75, 0.3333333333333333),
+                (3.75, 1.0),
+                (3.75, 1.6666666666666667),
+                (4.583333333333334, 0.3333333333333333),
+                (4.583333333333334, 1.0),
+                (4.583333333333334, 1.6666666666666667)
+            ][landing_pos_idx]
         else:
-            landing_pos = np.clip(landing_pos, [0.1, 0.1], [2.4, 1.9])
-
+            landing_pos = [
+                (0.4166666666666667, 0.3333333333333333),
+                (0.4166666666666667, 1.0),
+                (0.4166666666666667, 1.6666666666666667),
+                (1.25, 0.3333333333333333),
+                (1.25, 1.0),
+                (1.25, 1.6666666666666667),
+                (2.0833333333333335, 0.3333333333333333),
+                (2.0833333333333335, 1.0),
+                (2.0833333333333335, 1.6666666666666667)
+            ][landing_pos_idx]
         return (ty, landing_pos, hit_height)
 
     def result(self, obs):
@@ -87,3 +109,58 @@ class DLPlayer(Player):
 
     def hit(self, obs):
         return self.defense_model.predict(obs)
+
+class GreedyPlayer(DLPlayer):
+    def __init__(self, player_id, result_model, defense_model, act_model):
+        super().__init__(player_id, result_model, defense_model, act_model)
+
+    def generate_shot(self, state) -> tuple:
+        max_prob = 0
+        for ty in range(10):
+            for landing_pos_idx in range(9):
+                for hit_height in range(3):
+                    if self.player_id == 0:
+                        landing_pos = [
+                            (2.9166666666666665, 0.3333333333333333),
+                            (2.9166666666666665, 1.0),
+                            (2.9166666666666665, 1.6666666666666667),
+                            (3.75, 0.3333333333333333),
+                            (3.75, 1.0),
+                            (3.75, 1.6666666666666667),
+                            (4.583333333333334, 0.3333333333333333),
+                            (4.583333333333334, 1.0),
+                            (4.583333333333334, 1.6666666666666667)
+                        ][landing_pos_idx]
+                    else:
+                        landing_pos = [
+                            (0.4166666666666667, 0.3333333333333333),
+                            (0.4166666666666667, 1.0),
+                            (0.4166666666666667, 1.6666666666666667),
+                            (1.25, 0.3333333333333333),
+                            (1.25, 1.0),
+                            (1.25, 1.6666666666666667),
+                            (2.0833333333333335, 0.3333333333333333),
+                            (2.0833333333333335, 1.0),
+                            (2.0833333333333335, 1.6666666666666667)
+                        ][landing_pos_idx]
+                    action = (ty, landing_pos, hit_height)
+
+                    obs = state.copy()
+                    obs.append(action[0])
+                    obs.append(action[1][0])
+                    obs.append(action[1][1])
+                    obs.append(action[2])
+
+                    obs = torch.FloatTensor(obs).unsqueeze(0)
+
+                    with torch.no_grad():
+                        logits = self.result_model(obs)
+                        probs = F.softmax(logits, dim=1)
+                        prob = probs[0][0].item()
+
+                    if prob > max_prob:
+                        max_prob = prob
+                        final_action = action
+        # print('max_prob:', max_prob)
+        # print('action:', final_action)
+        return final_action

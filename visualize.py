@@ -199,7 +199,7 @@ class Visualizer:
 
             # 失误信息
             if failure_reason and t >= 1.0:
-                fail_text = FONT.render(f'Player {losing_player} {failure_reason}', True, RED)
+                fail_text = FONT.render(f'Player {losing_player ^ (failure_reason == '击球落地')} {failure_reason}', True, RED)
                 screen.blit(fail_text, (info_x, info_y + 120))
 
             # 图例

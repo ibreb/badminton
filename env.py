@@ -36,12 +36,11 @@ class Env:
         return self.state
 
     def step(self, action):
+        # print('?????', action)
         _, landing_pos, hit_height = action
-        print(self.score)
         player_id = self.current_player
 
         opponent_id = 1 - player_id
-        obs = self._get_obs()
 
         reward = 0
         done = False
@@ -53,6 +52,8 @@ class Env:
             'current_player': player_id
         }
 
+        obs = self._get_result_model_obs(action)
+        # print(obs)
         result = self.players[player_id].result(obs)
         if result != '成功':  # 出界或下网
             reward = -1
@@ -69,8 +70,8 @@ class Env:
                 landing_pos = (5, 3) if player_id == 0 else (0, -1)
 
         else:
+            obs = self._get_hit_model_obs(action)
             hit = self.players[opponent_id].hit(obs)
-            print(self.score, hit)
             if not hit:
                 reward = 1
                 done = True
@@ -111,10 +112,24 @@ class Env:
 
         return next_state, reward, done, info
 
-    def _get_obs(self):
-        """
-        得到网络输入
-        """
+    def _get_result_model_obs(self, action):
+        obs = self.state.copy()
+        obs.append(action[0])
+        obs.append(action[1][0])
+        obs.append(action[1][1])
+        obs.append(action[2])
+        # print(self.state, action, obs)
+        return obs
+    
+    def _get_hit_model_obs(self, action):
+        obs = self.state.copy()
+        obs.append(action[0])
+        obs.append(action[1][0])
+        obs.append(action[1][1])
+        obs.append(action[2])
+        return obs
+
+    def _get_act_model_obs(self):
         return self.state
 
     def render(self):
@@ -135,7 +150,6 @@ class Env:
             obs, reward, done, _ = self.step(action)
             action = self.players[self.current_player].generate_shot(obs)
 
-
     def _check_game_over(self):
         """
         检查是否有一方达到胜利条件
@@ -151,3 +165,11 @@ class Env:
         self.scored_player = 0
         while not self._check_game_over():
             self.run_episode(self.scored_player)
+
+    def run_n_matches(self, n):
+        scores = [0, 0]
+        for i in range(n):
+            self.run_match()
+            winner = 0 if self.score[0] > self.score[1] else 1
+            scores[winner] += 1
+        print(scores)
