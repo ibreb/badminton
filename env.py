@@ -7,7 +7,7 @@ class Env:
     def __init__(self, player0: Player, player1: Player, winning_score=10):
         self.players = [player0, player1]
         self.current_player = 0
-        self.ACTIONS = ['发球', '扣杀', '高远球', '网前球', '吊球', '平抽球', '挑球', '扑球', '挡网', '切球']
+        self.ACTIONS = ['发球', '扣杀', '高远球', '网前吊球', '吊球', '平抽球', '挑球', '扑球', '挡网', '切球']
 
         self.score = [0, 0]
         self.winning_score = winning_score  # 比赛结束的分数
@@ -54,11 +54,6 @@ class Env:
             self.score[opponent_id] += 1
             info['failure_reason'] = result
             info['losing_player'] = player_id
-
-            # if result == '下网':
-            #     landing_pos = (2.5, 1)
-            # if result == '出界':
-            #     landing_pos = (5, 3) if player_id == 0 else (0, -1)
 
         else:
             obs = self._get_hit_model_obs(action)
@@ -129,6 +124,8 @@ class Env:
         done = False
         while not done:
             obs, reward, done, _ = self.step(action)
+            if done:
+                break
             action = self.players[self.current_player].generate_shot(obs)
 
     def _check_game_over(self):

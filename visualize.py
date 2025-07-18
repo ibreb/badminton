@@ -8,7 +8,7 @@ class Visualizer:
         pygame.init()
         screen_width, screen_height = 1200, 800
         screen = pygame.display.set_mode((screen_width, screen_height))
-        FONT = pygame.font.SysFont('simhei', 24)
+        FONT = pygame.font.SysFont('simhei', 20)
         pygame.display.set_caption('羽毛球比赛')
         clock = pygame.time.Clock()
         FPS = 10
