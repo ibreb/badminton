@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class ResultModel(nn.Module):
-    def __init__(self, obs_dim=12, num_classes=3):
+    def __init__(self, obs_dim=8, num_classes=3):
         """
         结果模型：判断当前动作是否成功（成功/出界/下网）
         
@@ -37,7 +37,7 @@ class ResultModel(nn.Module):
 
 
 class DefenseModel(nn.Module):
-    def __init__(self, obs_dim=12):
+    def __init__(self, obs_dim=8):
         """
         防守模型：判断是否能接到对手的击球
         
@@ -67,7 +67,7 @@ class DefenseModel(nn.Module):
 
 
 class ActModel(nn.Module):
-    def __init__(self, obs_dim=8, shot_types=10, landing_pos_n=9, height_levels=3):
+    def __init__(self, obs_dim=5, shot_types=10, landing_pos_n=9, height_levels=3):
         """
         决策模型：根据观测和对手动作生成击球动作
         
@@ -98,7 +98,6 @@ class ActModel(nn.Module):
         输出：(shot_type, landing_pos, height)
         """
         obs = torch.FloatTensor(obs).unsqueeze(0)  # (1, input_dim)
-
         with torch.no_grad():
             shot_type_logits, landing_pos_logits, height_logits = self(obs)
 

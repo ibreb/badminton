@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 
 class Visualizer:
     @staticmethod
@@ -7,8 +8,8 @@ class Visualizer:
         pygame.init()
         screen_width, screen_height = 1200, 800
         screen = pygame.display.set_mode((screen_width, screen_height))
-        FONT = pygame.font.SysFont('simhei', 16)
-        pygame.display.set_caption('Badminton Visualizer')
+        FONT = pygame.font.SysFont('simhei', 24)
+        pygame.display.set_caption('羽毛球比赛')
         clock = pygame.time.Clock()
         FPS = 10
 
@@ -34,8 +35,36 @@ class Visualizer:
 
         def convert_coordinates(x, y):
             court_x = 0.76 + y * ((5.34 - 0.76) / 2)
-            court_y = 12.64 - x * ((12.64 - 0.76) / 5)
+            court_y = 0.76 + x * ((12.64 - 0.76) / 5)
             return court_to_screen(court_x, court_y)
+
+        def position_id_to_coords(position, player_id):
+
+            if position == -1:
+                return b_pos
+
+            position -= 1
+
+            i, j = position // 3, position % 3
+
+            dx = 2.5 / 3
+            dy = 2 / 3
+
+            # x = 2.5 + random.uniform(i * dx, i * dx + dx)
+            # y = random.uniform(j * dy, j * dy + dy)
+
+            x = 2.5 + i * dx + dx / 2
+            y = j * dy + dy / 2
+
+
+            if player_id == 0:
+                x = 5 - x
+                y = 2 - y
+
+            return x, y
+
+        def position_id_to_screen(position, player_id):
+            return convert_coordinates(*position_id_to_coords(position, player_id))
 
         # 加载并缩放球的PNG图片
         try:
@@ -50,9 +79,10 @@ class Visualizer:
         for step in range(len(history)):
             current_state = history[step]['state']
             next_state = history[step]['next_state']
+            player_id = history[step]['current_player']
 
-            current_sx, current_sy = convert_coordinates(current_state[4], current_state[5])
-            next_sx, next_sy = convert_coordinates(next_state[4], next_state[5])
+            current_sx, current_sy = position_id_to_screen(current_state[2], player_id)
+            next_sx, next_sy = position_id_to_screen(next_state[2], 1 - player_id)
 
             dx = next_sx - current_sx
             dy = next_sy - current_sy
@@ -128,6 +158,16 @@ class Visualizer:
         current_frame = 0
         running = True
 
+
+        def ins(current_pos, next_pos, t, cid, nid):
+
+            current_x, current_y = position_id_to_screen(current_pos, cid)
+            next_x, next_y = position_id_to_screen(next_pos, nid)
+
+            x = (1 - t) * current_x + t * next_x
+            y = (1 - t) * current_y + t * next_y
+            return x, y
+
         while running and current_frame < len(total_frames):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -139,34 +179,53 @@ class Visualizer:
             # 获取当前状态
             current_state = history[step]['state']
             next_state = history[step]['next_state']
+            current_player = history[step]['current_player']
+
             action = history[step]['action']
             reward = history[step]['reward']
             score_player0 = history[step]['score_player0']
             score_player1 = history[step]['score_player1']
             failure_reason = history[step].get('failure_reason', '')
             losing_player = history[step].get('losing_player', -1)
-            t0 = t * 0.6
 
-            player_x = (1 - t) * current_state[0] + t * next_state[0]
-            player_y = (1 - t) * current_state[1] + t * next_state[1]
-            opponent_x = (1 - t) * current_state[2] + t * next_state[2]
-            opponent_y = (1 - t) * current_state[3] + t * next_state[3]
-            if losing_player != -1:
-                if (losing_player == 0) ^ (failure_reason == '击球落地'):
-                    opponent_x = (1 - t0) * current_state[2] + t0 * next_state[4]
-                    opponent_y = (1 - t0) * current_state[3] + t0 * next_state[5]
+            if losing_player == -1:
+                player_pos = ins(current_state[0], next_state[0], t, 0, 0)
+                opponent_pos = ins(current_state[1], next_state[1], t, 1, 1)
+                ball_pos = ins(current_state[2], next_state[2], t, current_player, 1 - current_player)
+            else:
+
+                c_coords = position_id_to_coords(current_state[2], current_player)
+                n_coords = position_id_to_coords(next_state[2], 1 - current_player)
+
+
+                if failure_reason == '下网':
+                    ratio = (2.5 - c_coords[0]) / (n_coords[0] - c_coords[0])
+                    b_pos = (ratio * n_coords[0] + (1 - ratio) * c_coords[0],
+                             ratio * n_coords[1] + (1 - ratio) * c_coords[1]
+                             )
+                elif failure_reason == '出界':
+                    ratio = min(max((5.4 - c_coords[0]) / (n_coords[0] - c_coords[0]),
+                                (-0.4 - c_coords[0]) / (n_coords[0] - c_coords[0])),
+                                max((-0.4 - c_coords[1]) / (n_coords[1] - c_coords[1] + 1e-6),
+                                (2.4 - c_coords[1]) / (n_coords[1] - c_coords[1] + 1e-6)),
+                            )
+                    b_pos = (ratio * n_coords[0] + (1 - ratio) * c_coords[0],
+                             ratio * n_coords[1] + (1 - ratio) * c_coords[1]
+                             )
                 else:
-                    player_x = (1 - t0) * current_state[0] + t0 * next_state[4]
-                    player_y = (1 - t0) * current_state[1] + t0 * next_state[5]
-            ball_x = (1 - t) * current_state[4] + t * next_state[4]
-            ball_y = (1 - t) * current_state[5] + t * next_state[5]
+                    b_pos = n_coords
 
-            # 坐标转换
-            player_pos = convert_coordinates(player_x, player_y)
-            opponent_pos = convert_coordinates(opponent_x, opponent_y)
-            ball_pos = convert_coordinates(ball_x, ball_y)
 
-            # 绘制场地
+                ball_pos = ins(current_state[2], -1, t, current_player, 1 - current_player)
+
+                if (losing_player == 0) ^ (failure_reason == '击球落地'):
+                    player_pos = ins(current_state[0], next_state[0], t, 0, 0)
+                    opponent_pos = ins(current_state[1], -1, 0.6 * t, 1, 1)
+                else:
+                    player_pos = ins(current_state[0], -1, 0.6 * t, 0, 0)
+                    opponent_pos = ins(current_state[1], next_state[1], t, 1, 1)
+
+
             draw_court()
 
             # 绘制球员
@@ -194,7 +253,7 @@ class Visualizer:
                 screen.blit(FONT.render(f'动作: {action_name}', True, WHITE), (info_x, info_y))
                 screen.blit(FONT.render(f'奖励: {reward}', True, WHITE), (info_x, info_y + 20))
                 screen.blit(FONT.render(f'当前player: {current_state[-1]}', True, WHITE), (info_x, info_y + 40))
-                screen.blit(FONT.render(f'球高度: {next_state[6]:.2f}', True, WHITE), (info_x, info_y + 60))
+                screen.blit(FONT.render(f'球高度: {next_state[4]:.2f}', True, WHITE), (info_x, info_y + 60))
                 screen.blit(FONT.render(f'比分 - P0: {score_player0}  P1: {score_player1}', True, WHITE), (info_x, info_y + 80))
 
             # 失误信息
@@ -212,3 +271,5 @@ class Visualizer:
             clock.tick(FPS)
 
         pygame.quit()
+
+

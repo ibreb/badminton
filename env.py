@@ -7,9 +7,7 @@ class Env:
     def __init__(self, player0: Player, player1: Player, winning_score=10):
         self.players = [player0, player1]
         self.current_player = 0
-        self.is_serve_phase = True
         self.ACTIONS = ['发球', '扣杀', '高远球', '网前球', '吊球', '平抽球', '挑球', '扑球', '挡网', '切球']
-        self.is_serve_phase = True
 
         self.score = [0, 0]
         self.winning_score = winning_score  # 比赛结束的分数
@@ -20,23 +18,17 @@ class Env:
 
     def reset(self, serve_player=0):
         self.current_player = serve_player
-        self.is_serve_phase = True
 
-        player0_pos = (1, 1)
-        player1_pos = (4, 1)
-        if self.current_player == 0:
-            ball_pos = (1, 1)
-        else:
-            ball_pos = (4, 1)
-        
+        player0_pos = 5
+        player1_pos = 5
+        ball_pos = 5
         ball_height = 0
 
-        self.state = [player0_pos[0], player0_pos[1], player1_pos[0], player1_pos[1], ball_pos[0], ball_pos[1], ball_height, self.current_player]
+        self.state = [player0_pos, player1_pos, ball_pos, ball_height, serve_player]
 
         return self.state
 
     def step(self, action):
-        # print('?????', action)
         _, landing_pos, hit_height = action
         player_id = self.current_player
 
@@ -53,7 +45,6 @@ class Env:
         }
 
         obs = self._get_result_model_obs(action)
-        # print(obs)
         result = self.players[player_id].result(obs)
         if result != '成功':  # 出界或下网
             reward = -1
@@ -64,10 +55,10 @@ class Env:
             info['failure_reason'] = result
             info['losing_player'] = player_id
 
-            if result == '下网':
-                landing_pos = (2.5, 1)
-            if result == '出界':
-                landing_pos = (5, 3) if player_id == 0 else (0, -1)
+            # if result == '下网':
+            #     landing_pos = (2.5, 1)
+            # if result == '出界':
+            #     landing_pos = (5, 3) if player_id == 0 else (0, -1)
 
         else:
             obs = self._get_hit_model_obs(action)
@@ -83,22 +74,21 @@ class Env:
                 info['losing_player'] = opponent_id
 
         if player_id == 0:
-            player_positions = [[1, 1], landing_pos]
+            player_positions = [5, landing_pos]
         else:
-            player_positions = [landing_pos, [4, 1]]
+            player_positions = [landing_pos, 5]
 
         ball_pos = landing_pos
         ball_height = hit_height
-        self.is_serve_phase = False
 
         next_state = [
-            *player_positions[0], *player_positions[1],
-            *ball_pos, ball_height, opponent_id
+            *player_positions, ball_pos, ball_height, opponent_id
         ]
 
         self.history.append({
             'state': self.state,
             'action': action,
+            'current_player': player_id,
             'next_state': next_state,
             'reward': reward,
             'score_player0': self.score[0],
@@ -113,20 +103,11 @@ class Env:
         return next_state, reward, done, info
 
     def _get_result_model_obs(self, action):
-        obs = self.state.copy()
-        obs.append(action[0])
-        obs.append(action[1][0])
-        obs.append(action[1][1])
-        obs.append(action[2])
-        # print(self.state, action, obs)
+        obs = self.state + list(action)
         return obs
     
     def _get_hit_model_obs(self, action):
-        obs = self.state.copy()
-        obs.append(action[0])
-        obs.append(action[1][0])
-        obs.append(action[1][1])
-        obs.append(action[2])
+        obs = self.state + list(action)
         return obs
 
     def _get_act_model_obs(self):
@@ -173,3 +154,4 @@ class Env:
             winner = 0 if self.score[0] > self.score[1] else 1
             scores[winner] += 1
         print(scores)
+        

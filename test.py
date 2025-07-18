@@ -7,8 +7,8 @@ def main():
     defense_model = DefenseModel()
     act_model = ActModel()
 
-    player0 = GreedyPlayer(0, result_model, defense_model, act_model)
-    player1 = GreedyPlayer(1, result_model, defense_model, act_model)
+    player0 = SamplePlayer(0)
+    player1 = SamplePlayer(1)
 
     env = Env(player0, player1)
     env.run_match()

@@ -30,17 +30,19 @@ class SamplePlayer(Player):
         self.player_id = player_id
         
     def serve(self, obs) -> tuple:
+        return (0, 4, 1)
         """生成发球动作，需返回 (shot_type, landing_pos, height)"""
-        if obs[-1] == 0:
-            # 玩家0发球到对方场地右侧（坐标[4,2]）
-            return (0, (4, 2), 1)  # (shot_type, landing_pos, height)
-        else:
-            # 玩家1发球到对方场地左侧（坐标[1,2]）
-            return (0, (1, 2), 1)
+        # if obs[-1] == 0:
+        #     # 玩家0发球到对方场地右侧（坐标[4,2]）
+        #     return (0, (4, 2), 1)  # (shot_type, landing_pos, height)
+        # else:
+        #     # 玩家1发球到对方场地左侧（坐标[1,2]）
+        #     return (0, (1, 2), 1)
 
     def generate_shot(self, obs):
         shot_type = random.randint(0, 9)
-        target = (random.uniform(3,5), random.uniform(0,2)) if obs[-1] == 0 else (random.uniform(0,2), random.uniform(0,2))
+        # target = (random.uniform(3,5), random.uniform(0,2)) if obs[-1] == 0 else (random.uniform(0,2), random.uniform(0,2))
+        target = random.randint(1, 9)
         return (shot_type, target, 2)
     
     def result(self, obs):
@@ -68,41 +70,41 @@ class DLPlayer(Player):
 
     def serve(self, obs) -> tuple:
         ty, landing_pos, hit_height = self.act_model.predict(obs)
-        if self.player_id == 0:
-            landing_pos = (4, 2)  # np.clip(landing_pos, [2.6, 1.1], [4.9, 1.9])
-        else:
-            landing_pos = (1, 0)  # np.clip(landing_pos, [0.1, 0.1], [2.4, 0.9])
+        # if self.player_id == 0:
+        #     landing_pos = (4, 2)  # np.clip(landing_pos, [2.6, 1.1], [4.9, 1.9])
+        # else:
+        #     landing_pos = (1, 0)  # np.clip(landing_pos, [0.1, 0.1], [2.4, 0.9])
 
-        return (ty, landing_pos, hit_height)
+        return (ty, 1, hit_height)
 
     def generate_shot(self, obs) -> tuple:
         ty, landing_pos_idx, hit_height = self.act_model.predict(obs)
         
-        if self.player_id == 0:
-            landing_pos = [
-                (2.9166666666666665, 0.3333333333333333),
-                (2.9166666666666665, 1.0),
-                (2.9166666666666665, 1.6666666666666667),
-                (3.75, 0.3333333333333333),
-                (3.75, 1.0),
-                (3.75, 1.6666666666666667),
-                (4.583333333333334, 0.3333333333333333),
-                (4.583333333333334, 1.0),
-                (4.583333333333334, 1.6666666666666667)
-            ][landing_pos_idx]
-        else:
-            landing_pos = [
-                (0.4166666666666667, 0.3333333333333333),
-                (0.4166666666666667, 1.0),
-                (0.4166666666666667, 1.6666666666666667),
-                (1.25, 0.3333333333333333),
-                (1.25, 1.0),
-                (1.25, 1.6666666666666667),
-                (2.0833333333333335, 0.3333333333333333),
-                (2.0833333333333335, 1.0),
-                (2.0833333333333335, 1.6666666666666667)
-            ][landing_pos_idx]
-        return (ty, landing_pos, hit_height)
+        # if self.player_id == 0:
+        #     landing_pos = [
+        #         (2.9166666666666665, 0.3333333333333333),
+        #         (2.9166666666666665, 1.0),
+        #         (2.9166666666666665, 1.6666666666666667),
+        #         (3.75, 0.3333333333333333),
+        #         (3.75, 1.0),
+        #         (3.75, 1.6666666666666667),
+        #         (4.583333333333334, 0.3333333333333333),
+        #         (4.583333333333334, 1.0),
+        #         (4.583333333333334, 1.6666666666666667)
+        #     ][landing_pos_idx]
+        # else:
+        #     landing_pos = [
+        #         (0.4166666666666667, 0.3333333333333333),
+        #         (0.4166666666666667, 1.0),
+        #         (0.4166666666666667, 1.6666666666666667),
+        #         (1.25, 0.3333333333333333),
+        #         (1.25, 1.0),
+        #         (1.25, 1.6666666666666667),
+        #         (2.0833333333333335, 0.3333333333333333),
+        #         (2.0833333333333335, 1.0),
+        #         (2.0833333333333335, 1.6666666666666667)
+        #     ][landing_pos_idx]
+        return (ty, landing_pos_idx, hit_height)
 
     def result(self, obs):
         return self.result_model.predict(obs)
