@@ -30,6 +30,12 @@ class Env:
 
     def step(self, action):
         _, landing_pos, hit_height = action
+
+        # print('===================')
+        # print(self.ACTIONS[_], landing_pos, hit_height)
+
+        assert 1 <= hit_height <= 3
+        assert 0 <= landing_pos <= 9
         player_id = self.current_player
 
         opponent_id = 1 - player_id
@@ -98,7 +104,7 @@ class Env:
         return next_state, reward, done, info
 
     def _get_result_model_obs(self, action):
-        obs = self.state + list(action)
+        obs = self.state + [action[0], action[2]]
         return obs
     
     def _get_hit_model_obs(self, action):

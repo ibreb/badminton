@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class ResultModel(nn.Module):
-    def __init__(self, obs_dim=8, num_classes=3):
+    def __init__(self, obs_dim=7, num_classes=3):
         """
         结果模型：判断当前动作是否成功（成功/出界/下网）
         
@@ -33,6 +33,7 @@ class ResultModel(nn.Module):
             logits = self(obs)
             probs = F.softmax(logits, dim=1)
             idx = torch.multinomial(probs, num_samples=1).item()
+            # print('result probs: ', probs)
         return ['成功', '出界', '下网'][idx]
 
 
@@ -63,6 +64,7 @@ class DefenseModel(nn.Module):
         obs = torch.FloatTensor(obs).unsqueeze(0)  # (1, input_dim)
         with torch.no_grad():
             prob = self(obs).item()
+        # print('hit prob = ', prob)
         return random.random() < prob
 
 
@@ -77,38 +79,56 @@ class ActModel(nn.Module):
         - height_levels: 击球高度级数
         """
         super(ActModel, self).__init__()
+        self.shot_types = shot_types
         self.net = nn.Sequential(
             nn.Linear(obs_dim, 128),
             nn.ReLU()
         )
         self.shot_type_head = nn.Linear(128, shot_types)
-        self.landing_pos_head = nn.Linear(128, landing_pos_n)
-        self.height_head = nn.Linear(128, height_levels)
+        self.landing_pos_head = nn.Linear(128 + shot_types, landing_pos_n)
+        self.height_head = nn.Linear(128 + shot_types, height_levels)
 
-    def forward(self, x):
-        features = self.net(x)
+    def forward(self, x, shot_type=None):
+        features = self.net(x)  # (batch, 128)
         shot_type_logits = self.shot_type_head(features)
-        landing_pos_logits = self.landing_pos_head(features)
-        height_logits = self.height_head(features)
-        return shot_type_logits, landing_pos_logits, height_logits
+
+        if self.training:
+            if shot_type is None:
+                raise ValueError("shot_type must be provided during training")
+            shot_onehot = F.one_hot(shot_type, num_classes=self.shot_types).float()
+        else:
+            _, shot_argmax = torch.max(shot_type_logits, dim=1)
+            shot_onehot = F.one_hot(shot_argmax, num_classes=self.shot_types).float()
+
+        combined = torch.cat([features, shot_onehot], dim=1)  # (batch, 128 + shot_types)
+        landing_logits = self.landing_pos_head(combined)
+        height_logits = self.height_head(combined)
+        return shot_type_logits, landing_logits, height_logits
 
     def predict(self, obs):
-        """
-        输入：当前观测 obs
-        输出：(shot_type, landing_pos, height)
-        """
-        obs = torch.FloatTensor(obs).unsqueeze(0)  # (1, input_dim)
+        obs = torch.FloatTensor(obs).unsqueeze(0)  # (1, obs_dim)
         with torch.no_grad():
-            shot_type_logits, landing_pos_logits, height_logits = self(obs)
+            features = self.net(obs)  # (1, 128)
 
-            shot_type_probs = F.softmax(shot_type_logits, dim=1)
-            shot_type = torch.multinomial(shot_type_probs, num_samples=1).item()
+            shot_type_logits = self.shot_type_head(features)
+            shot_probs = F.softmax(shot_type_logits, dim=1)
+            # print('shot_probs:', shot_probs)
+            shot_type = torch.multinomial(shot_probs, num_samples=1).item()
 
-            landing_pos_probs = F.softmax(landing_pos_logits, dim=1)
-            landing_pos_idx = torch.multinomial(landing_pos_probs, num_samples=1).item()
+            shot_tensor = torch.tensor([shot_type], dtype=torch.long)
+            shot_onehot = F.one_hot(shot_tensor, num_classes=self.shot_types).float()  # (1, shot_types)
+
+            combined = torch.cat([features, shot_onehot], dim=1)  # (1, 128 + shot_types)
+
+            landing_logits = self.landing_pos_head(combined)
+            height_logits = self.height_head(combined)
+
+            landing_probs = F.softmax(landing_logits, dim=1)
+            landing_pos = torch.multinomial(landing_probs, num_samples=1).item()
+            # print('landing_probs:', landing_probs)
 
             height_probs = F.softmax(height_logits, dim=1)
             height = torch.multinomial(height_probs, num_samples=1).item()
+            # print('height_probs:', height_probs)
 
-
-        return (shot_type, landing_pos_idx, height)
+        return (shot_type, landing_pos, height)
