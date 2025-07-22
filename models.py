@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class ResultModel(nn.Module):
-    def __init__(self, obs_dim=7, num_classes=3):
+    def __init__(self, obs_dim=60, num_classes=3):
         """
         结果模型：判断当前动作是否成功（成功/出界/下网）
         
@@ -34,11 +34,12 @@ class ResultModel(nn.Module):
             probs = F.softmax(logits, dim=1)
             idx = torch.multinomial(probs, num_samples=1).item()
             # print('result probs: ', probs)
+            # assert probs[0][0] > probs[0][1] and probs[0][0] > probs[0][2]
         return ['成功', '出界', '下网'][idx]
 
 
 class DefenseModel(nn.Module):
-    def __init__(self, obs_dim=8):
+    def __init__(self, obs_dim=69):
         """
         防守模型：判断是否能接到对手的击球
         
@@ -65,11 +66,12 @@ class DefenseModel(nn.Module):
         with torch.no_grad():
             prob = self(obs).item()
         # print('hit prob = ', prob)
+        # assert prob > 0.5
         return random.random() < prob
 
 
 class ActModel(nn.Module):
-    def __init__(self, obs_dim=5, shot_types=10, landing_pos_n=9, height_levels=3):
+    def __init__(self, obs_dim=69, shot_types=10, landing_pos_n=9, height_levels=3):
         """
         决策模型：根据观测和对手动作生成击球动作
         
@@ -82,6 +84,7 @@ class ActModel(nn.Module):
         self.shot_types = shot_types
         self.net = nn.Sequential(
             nn.Linear(obs_dim, 128),
+            nn.Linear(128, 128),
             nn.ReLU()
         )
         self.shot_type_head = nn.Linear(128, shot_types)
@@ -129,6 +132,5 @@ class ActModel(nn.Module):
 
             height_probs = F.softmax(height_logits, dim=1)
             height = torch.multinomial(height_probs, num_samples=1).item()
-            # print('height_probs:', height_probs)
-
+            
         return (shot_type, landing_pos, height)

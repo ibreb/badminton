@@ -1,6 +1,8 @@
 import pygame
 import math
 import random
+import cv2
+import numpy as np
 
 class Visualizer:
     @staticmethod
@@ -8,7 +10,7 @@ class Visualizer:
         pygame.init()
         screen_width, screen_height = 1200, 800
         screen = pygame.display.set_mode((screen_width, screen_height))
-        FONT = pygame.font.SysFont('simhei', 20)
+        FONT = pygame.font.SysFont('simhei', 30)
         pygame.display.set_caption('羽毛球比赛')
         clock = pygame.time.Clock()
         FPS = 10
@@ -56,7 +58,6 @@ class Visualizer:
             x = 2.5 + i * dx + dx / 2
             y = j * dy + dy / 2
 
-
             if player_id == 0:
                 x = 5 - x
                 y = 2 - y
@@ -99,6 +100,8 @@ class Visualizer:
         total_frames = []
         animate_fps = 10
         pause_frames = FPS * 2
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 编码格式
+        video_writer = cv2.VideoWriter('output.mp4', fourcc, FPS, (screen_width, screen_height))
 
         for step in range(len(history)):
             for f in range(animate_fps):
@@ -244,32 +247,39 @@ class Visualizer:
                 pygame.draw.circle(screen, WHITE, ball_pos, int(0.15 * scale), 1)
 
             # 渲染文本信息
-            info_x = screen_width - 210
+            info_x = screen_width - 400
             info_y = 50
+            K = 35
 
             if action is not None:
                 action_idx = action[0]
                 action_name = ACTIONS[action_idx] if action_idx < len(ACTIONS) else ACTIONS[-1]
-                screen.blit(FONT.render(f'动作: {action_name}', True, WHITE), (info_x, info_y))
-                screen.blit(FONT.render(f'奖励: {reward}', True, WHITE), (info_x, info_y + 20))
-                screen.blit(FONT.render(f'当前player: {current_state[-1]}', True, WHITE), (info_x, info_y + 40))
-                screen.blit(FONT.render(f'球高度: {next_state[4]:.2f}', True, WHITE), (info_x, info_y + 60))
-                screen.blit(FONT.render(f'比分 - P0: {score_player0}  P1: {score_player1}', True, WHITE), (info_x, info_y + 80))
+                screen.blit(FONT.render(f'当前player: {current_state[-1]}', True, WHITE), (info_x, info_y))
+                screen.blit(FONT.render(f'动作类型: {action_name}', True, WHITE), (info_x, info_y + K))
+                screen.blit(FONT.render(f'击球高度: {(action[2]):.2f}', True, WHITE), (info_x, info_y + K * 2))
+                screen.blit(FONT.render(f'奖励: {reward}', True, WHITE), (info_x, info_y + K * 3))
+                screen.blit(FONT.render(f'比分 - 林丹: {score_player0}  李宗伟: {score_player1}', True, WHITE), (info_x, info_y + K * 4))
 
             # 失误信息
             if failure_reason and t >= 1.0:
                 fail_text = FONT.render(f'Player {losing_player ^ (failure_reason == '击球落地')} {failure_reason}', True, RED)
-                screen.blit(fail_text, (info_x, info_y + 120))
+                screen.blit(fail_text, (info_x, info_y + K * 6))
 
             # 图例
-            pygame.draw.rect(screen, BLUE, (info_x, info_y + 160, 15, 15))
-            screen.blit(FONT.render('Player 0', True, WHITE), (info_x + 20, info_y + 160))
-            pygame.draw.rect(screen, RED, (info_x, info_y + 180, 15, 15))
-            screen.blit(FONT.render('Player 1', True, WHITE), (info_x + 20, info_y + 180))
+            pygame.draw.rect(screen, BLUE, (info_x, info_y + K * 8, 15, 15))
+            screen.blit(FONT.render('林丹AI', True, WHITE), (info_x + 20, info_y + K * 8))
+            pygame.draw.rect(screen, RED, (info_x, info_y + K * 9, 15, 15))
+            screen.blit(FONT.render('李宗伟AI', True, WHITE), (info_x + 20, info_y + K * 9))
 
             pygame.display.flip()
+            # 捕获当前帧
+            frame = pygame.surfarray.array3d(screen)  # 得到 (width, height, 3) 的 RGB 数组
+            frame = np.transpose(frame, (1, 0, 2))     # 转换为 (height, width, 3)
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)  # 转换为 OpenCV 的 BGR 格式
+
+            # 写入视频帧
+            video_writer.write(frame)
             clock.tick(FPS)
 
         pygame.quit()
-
 

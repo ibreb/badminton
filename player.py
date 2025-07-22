@@ -59,17 +59,17 @@ class DLPlayer(Player):
         self.result_model = result_model
         self.defense_model = defense_model
         self.act_model = act_model
-        self.load()
-
-    def load(self):
-        self.result_model.load_state_dict(torch.load('result_model.pth'))
+        # self.load()
         self.result_model.eval()
-
-        self.defense_model.load_state_dict(torch.load('defense_model.pth'))
         self.defense_model.eval()
-
-        self.act_model.load_state_dict(torch.load('act_model.pth'))
         self.act_model.eval()
+
+    # def load(self):
+    #     self.result_model.load_state_dict(torch.load('result_model.pth'))
+
+    #     self.defense_model.load_state_dict(torch.load('defense_model.pth'))
+
+    #     self.act_model.load_state_dict(torch.load('act_model.pth'))
 
     def serve(self, obs) -> tuple:
         ty, landing_pos, hit_height = self.act_model.predict(obs)
@@ -94,13 +94,11 @@ class GreedyPlayer(DLPlayer):
         for ty in range(10):
             for landing_pos_idx in range(9):
                 for hit_height in range(3):
-                    action = (ty, landing_pos_idx, hit_height)
+                    action = (ty, landing_pos_idx + 1, hit_height + 1)
 
                     obs = state.copy()
                     obs.append(action[0])
-                    obs.append(action[1][0])
-                    obs.append(action[1][1])
-                    obs.append(action[2])
+                    obs.append(action[1])
 
                     obs = torch.FloatTensor(obs).unsqueeze(0)
 

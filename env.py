@@ -1,10 +1,12 @@
 import numpy as np
+from collections import deque
+
 from player import Player
 from visualize import Visualizer
 
 class Env:
 
-    def __init__(self, player0: Player, player1: Player, winning_score=10):
+    def __init__(self, player0: Player, player1: Player, winning_score=21):
         self.players = [player0, player1]
         self.current_player = 0
         self.ACTIONS = ['发球', '扣杀', '高远球', '网前吊球', '吊球', '平抽球', '挑球', '扑球', '挡网', '切球']
@@ -26,13 +28,17 @@ class Env:
 
         self.state = [player0_pos, player1_pos, ball_pos, ball_height, serve_player]
 
+        self.window_size = 3
+        self.window = deque(maxlen=self.window_size)
+        for i in range(self.window_size):
+            self.window.append((10, 5, 2))
+
         return self.state
 
     def step(self, action):
         _, landing_pos, hit_height = action
 
-        # print('===================')
-        # print(self.ACTIONS[_], landing_pos, hit_height)
+        self.window.append(action)
 
         assert 1 <= hit_height <= 3
         assert 0 <= landing_pos <= 9
@@ -103,16 +109,34 @@ class Env:
 
         return next_state, reward, done, info
 
+    def _one_hot(self, x, n):
+        V = []
+        for i in range(n):
+            V.append(i == x)
+        return V
+
+    def _get_state(self):
+        state = self.state.copy()
+        if self.current_player == 1:
+            state[0], state[1] = state[1], state[0]
+        return state[:4]
+
     def _get_result_model_obs(self, action):
-        obs = self.state + [action[0], action[2]]
+        obs = (self._one_hot(self.window[-1][0], 11) + self._one_hot(self.window[-1][0], 3) + 
+               self._one_hot(self.window[-2][0], 11) + self._one_hot(self.window[-2][1], 9) + self._one_hot(self.window[-2][0], 3) +
+               self._one_hot(self.window[-3][0], 11) + self._one_hot(self.window[-3][1], 9) + self._one_hot(self.window[-3][0], 3))
         return obs
     
     def _get_hit_model_obs(self, action):
-        obs = self.state + list(action)
+        obs = (self._one_hot(self.window[-1][0], 11) + self._one_hot(self.window[-1][1], 9) + self._one_hot(self.window[-1][0], 3) + 
+               self._one_hot(self.window[-2][0], 11) + self._one_hot(self.window[-2][1], 9) + self._one_hot(self.window[-2][0], 3) +
+               self._one_hot(self.window[-3][0], 11) + self._one_hot(self.window[-3][1], 9) + self._one_hot(self.window[-3][0], 3))
         return obs
 
     def _get_act_model_obs(self):
-        return self.state
+        return (self._one_hot(self.window[-1][0], 11) + self._one_hot(self.window[-1][1], 9) + self._one_hot(self.window[-1][0], 3) + 
+               self._one_hot(self.window[-2][0], 11) + self._one_hot(self.window[-2][1], 9) + self._one_hot(self.window[-2][0], 3) +
+               self._one_hot(self.window[-3][0], 11) + self._one_hot(self.window[-3][1], 9) + self._one_hot(self.window[-3][0], 3))
 
     def render(self):
         """
@@ -120,19 +144,18 @@ class Env:
         """
         Visualizer.animate(self.history, self.ACTIONS)
 
-
     def run_episode(self, serve_player=0):
         """
         运行完整一分
         """
         state = self.reset(serve_player)
-        action = self.players[self.current_player].serve(state)
+        action = self.players[self.current_player].serve(self._get_act_model_obs())
         done = False
         while not done:
             obs, reward, done, _ = self.step(action)
             if done:
                 break
-            action = self.players[self.current_player].generate_shot(obs)
+            action = self.players[self.current_player].generate_shot(self._get_act_model_obs())
 
     def _check_game_over(self):
         """
