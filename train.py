@@ -54,6 +54,12 @@ class RecordPlayer(Player):
                 
                 height = int(float(row['ball_height']))
 
+                # 修正数据
+                if ty == 2 and landing_area in [1, 2, 3]:
+                    landing_area += 3
+                if ty in [3, 7, 8] and actions[-1][1] in [7, 8, 9]:
+                    actions[-1] = (actions[-1][0], actions[-1][1] - 3, actions[-1][2])
+
                 if height not in [1, 2, 3]:
                     return False
 
@@ -64,8 +70,6 @@ class RecordPlayer(Player):
                 self.players.append(player)
                 
                 actions.append((ty, landing_area, height))
-                # if row['type'] == '扣杀':
-                #     print(height)
 
             winner = rows[-1].get('getpoint_player', '').strip()
 
@@ -135,7 +139,7 @@ def plot_losses(train_losses, test_losses, title, y_max=None):
 
 
 if __name__ == "__main__":
-    target_player = '李宗伟'
+    target_player = '林丹'
 
     path = Path('羽毛球关键帧')
     replayPlayer = RecordPlayer()

@@ -77,6 +77,8 @@ class DLPlayer(Player):
 
     def generate_shot(self, obs) -> tuple:
         ty, landing_pos, hit_height = self.act_model.predict(obs)
+        if ty == 0:
+            ty = 6
         return (ty, landing_pos + 1, hit_height + 1)
 
     def result(self, obs):
