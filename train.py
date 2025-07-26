@@ -155,7 +155,7 @@ def plot_losses(train_losses, test_losses, title, y_max=None):
 
 
 if __name__ == "__main__":
-    target_player = '李宗伟'
+    target_player = '林丹'
 
     path = Path('羽毛球关键帧')
     replayPlayer = RecordPlayer()
