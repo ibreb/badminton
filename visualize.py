@@ -3,10 +3,11 @@ import math
 import random
 import cv2
 import numpy as np
+from utils import *
 
 class Visualizer:
     @staticmethod
-    def animate(history, ACTIONS):
+    def animate(history):
         pygame.init()
         screen_width, screen_height = 1200, 800
         screen = pygame.display.set_mode((screen_width, screen_height))
@@ -98,14 +99,15 @@ class Visualizer:
 
         # 生成帧列表
         total_frames = []
-        animate_fps = 10
+        # animate_frames = FPS
         pause_frames = FPS * 2
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 编码格式
         video_writer = cv2.VideoWriter('output.mp4', fourcc, FPS, (screen_width, screen_height))
 
         for step in range(len(history)):
-            for f in range(animate_fps):
-                total_frames.append((step, f / animate_fps))
+            animate_frames = round(ACTION_TIMES[history[step]['action'][0]] * FPS)
+            for f in range(animate_frames):
+                total_frames.append((step, f / animate_frames))
             failure_reason = history[step].get('failure_reason', '')
             if failure_reason and failure_reason != '成功':
                 for f in range(pause_frames):
@@ -256,7 +258,7 @@ class Visualizer:
                 action_name = ACTIONS[action_idx] if action_idx < len(ACTIONS) else ACTIONS[-1]
                 screen.blit(FONT.render(f'当前player: {current_state[-1]}', True, WHITE), (info_x, info_y))
                 screen.blit(FONT.render(f'动作类型: {action_name}', True, WHITE), (info_x, info_y + K))
-                screen.blit(FONT.render(f'击球高度: {(action[2]):.2f}', True, WHITE), (info_x, info_y + K * 2))
+                screen.blit(FONT.render(f'击球高度: {['低', '中', '高'][action[2] - 1]}', True, WHITE), (info_x, info_y + K * 2))
                 screen.blit(FONT.render(f'奖励: {reward}', True, WHITE), (info_x, info_y + K * 3))
                 screen.blit(FONT.render(f'比分 - 林丹: {score_player0}  李宗伟: {score_player1}', True, WHITE), (info_x, info_y + K * 4))
 

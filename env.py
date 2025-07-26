@@ -1,6 +1,7 @@
 import numpy as np
 from collections import deque
 
+from utils import *
 from player import Player
 from visualize import Visualizer
 
@@ -9,7 +10,6 @@ class Env:
     def __init__(self, player0: Player, player1: Player, winning_score=21):
         self.players = [player0, player1]
         self.current_player = 0
-        self.ACTIONS = ['发球', '扣杀', '高远球', '网前吊球', '吊球', '平抽球', '挑球', '扑球', '挡网', '切球']
 
         self.score = [0, 0]
         self.winning_score = winning_score  # 比赛结束的分数
@@ -28,15 +28,18 @@ class Env:
 
         self.state = [player0_pos, player1_pos, ball_pos, ball_height, serve_player]
 
-        self.window_size = 3
+        self.window_size = WINDOW_SIZE
         self.window = deque(maxlen=self.window_size)
         for i in range(self.window_size):
-            self.window.append((10, 5, 2))
+            if len(FEATURES) == 5:
+                self.window.append((10, 5, 2, 0, 0))
+            else:
+                self.window.append((10, 5, 2))
 
         return self.state
 
     def step(self, action):
-        _, landing_pos, hit_height = action
+        _, landing_pos, hit_height, backhand, aroundhead = action
 
         self.window.append(action)
 
@@ -122,27 +125,33 @@ class Env:
         return state[:4]
 
     def _get_result_model_obs(self, action):
-        obs = (self._one_hot(self.window[-1][0], 11) + self._one_hot(self.window[-1][0], 3) + 
-               self._one_hot(self.window[-2][0], 11) + self._one_hot(self.window[-2][1], 9) + self._one_hot(self.window[-2][0], 3) +
-               self._one_hot(self.window[-3][0], 11) + self._one_hot(self.window[-3][1], 9) + self._one_hot(self.window[-3][0], 3))
+        obs = []
+        for i in range(1, self.window_size + 1):
+            for j, feature in enumerate(FEATURES):
+                if i == 1 and feature == 'landing_area':
+                    continue
+                obs += self._one_hot(self.window[-i][j], FEATURE_SIZES[j])
         return obs
     
     def _get_hit_model_obs(self, action):
-        obs = (self._one_hot(self.window[-1][0], 11) + self._one_hot(self.window[-1][1], 9) + self._one_hot(self.window[-1][0], 3) + 
-               self._one_hot(self.window[-2][0], 11) + self._one_hot(self.window[-2][1], 9) + self._one_hot(self.window[-2][0], 3) +
-               self._one_hot(self.window[-3][0], 11) + self._one_hot(self.window[-3][1], 9) + self._one_hot(self.window[-3][0], 3))
+        obs = []
+        for i in range(1, self.window_size + 1):
+            for j, feature in enumerate(FEATURES):
+                obs += self._one_hot(self.window[-i][j], FEATURE_SIZES[j])
         return obs
 
     def _get_act_model_obs(self):
-        return (self._one_hot(self.window[-1][0], 11) + self._one_hot(self.window[-1][1], 9) + self._one_hot(self.window[-1][0], 3) + 
-               self._one_hot(self.window[-2][0], 11) + self._one_hot(self.window[-2][1], 9) + self._one_hot(self.window[-2][0], 3) +
-               self._one_hot(self.window[-3][0], 11) + self._one_hot(self.window[-3][1], 9) + self._one_hot(self.window[-3][0], 3))
+        obs = []
+        for i in range(1, self.window_size + 1):
+            for j, feature in enumerate(FEATURES):
+                obs += self._one_hot(self.window[-i][j], FEATURE_SIZES[j])
+        return obs
 
     def render(self):
         """
         渲染击打过程
         """
-        Visualizer.animate(self.history, self.ACTIONS)
+        Visualizer.animate(self.history)
 
     def run_episode(self, serve_player=0):
         """

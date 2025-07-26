@@ -4,8 +4,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from utils import *
+
 class ResultModel(nn.Module):
-    def __init__(self, obs_dim=60, num_classes=3):
+    def __init__(self, obs_dim=OBS_DIM_RESULT_MODEL, num_classes=3):
         """
         结果模型：判断当前动作是否成功（成功/出界/下网）
         
@@ -39,7 +41,7 @@ class ResultModel(nn.Module):
 
 
 class DefenseModel(nn.Module):
-    def __init__(self, obs_dim=69):
+    def __init__(self, obs_dim=OBS_DIM_DEFENSE_MODEL):
         """
         防守模型：判断是否能接到对手的击球
         
@@ -71,7 +73,7 @@ class DefenseModel(nn.Module):
 
 
 class ActModel(nn.Module):
-    def __init__(self, obs_dim=69, shot_types=10, landing_pos_n=9, height_levels=3):
+    def __init__(self, obs_dim=OBS_DIM_ACT_MODEL, shot_types=10, landing_pos_n=9, height_levels=3):
         """
         决策模型：根据观测和对手动作生成击球动作
         
@@ -90,6 +92,8 @@ class ActModel(nn.Module):
         self.shot_type_head = nn.Linear(128, shot_types)
         self.landing_pos_head = nn.Linear(128 + shot_types, landing_pos_n)
         self.height_head = nn.Linear(128 + shot_types, height_levels)
+        self.backhand_head = nn.Linear(128 + shot_types, 2)
+        self.aroundhead_head = nn.Linear(128 + shot_types, 2)
 
     def forward(self, x, shot_type=None):
         features = self.net(x)  # (batch, 128)
@@ -106,7 +110,13 @@ class ActModel(nn.Module):
         combined = torch.cat([features, shot_onehot], dim=1)  # (batch, 128 + shot_types)
         landing_logits = self.landing_pos_head(combined)
         height_logits = self.height_head(combined)
-        return shot_type_logits, landing_logits, height_logits
+
+        if 'backhand' in FEATURES:
+            backhand_logits = self.backhand_head(combined)
+        if 'aroundhead' in FEATURES:
+            aroundhead_logits = self.aroundhead_head(combined)
+
+        return shot_type_logits, landing_logits, height_logits, backhand_logits, aroundhead_logits
 
     def predict(self, obs):
         obs = torch.FloatTensor(obs).unsqueeze(0)  # (1, obs_dim)
@@ -124,13 +134,20 @@ class ActModel(nn.Module):
             combined = torch.cat([features, shot_onehot], dim=1)  # (1, 128 + shot_types)
 
             landing_logits = self.landing_pos_head(combined)
-            height_logits = self.height_head(combined)
-
             landing_probs = F.softmax(landing_logits, dim=1)
             landing_pos = torch.multinomial(landing_probs, num_samples=1).item()
             # print('landing_probs:', landing_probs)
 
+            height_logits = self.height_head(combined)
             height_probs = F.softmax(height_logits, dim=1)
             height = torch.multinomial(height_probs, num_samples=1).item()
+
+            backhand_logits = self.backhand_head(combined)
+            backhand_probs = F.softmax(backhand_logits, dim=1)
+            backhand = torch.multinomial(backhand_probs, num_samples=1).item()
+
+            aroundhead_logits = self.aroundhead_head(combined)
+            aroundhead_probs = F.softmax(aroundhead_logits, dim=1)
+            aroundhead = torch.multinomial(aroundhead_probs, num_samples=1).item()
             
-        return (shot_type, landing_pos, height)
+        return (shot_type, landing_pos, height, backhand, aroundhead)

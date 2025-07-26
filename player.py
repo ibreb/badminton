@@ -72,14 +72,14 @@ class DLPlayer(Player):
     #     self.act_model.load_state_dict(torch.load('act_model.pth'))
 
     def serve(self, obs) -> tuple:
-        ty, landing_pos, hit_height = self.act_model.predict(obs)
-        return (0, landing_pos + 1, hit_height + 1)
+        ty, landing_pos, hit_height, backhand, aroundhead = self.act_model.predict(obs)
+        return (0, landing_pos + 1, hit_height + 1, backhand, aroundhead)
 
     def generate_shot(self, obs) -> tuple:
-        ty, landing_pos, hit_height = self.act_model.predict(obs)
+        ty, landing_pos, hit_height, backhand, aroundhead = self.act_model.predict(obs)
         if ty == 0:
             ty = 6
-        return (ty, landing_pos + 1, hit_height + 1)
+        return (ty, landing_pos + 1, hit_height + 1, backhand, aroundhead)
 
     def result(self, obs):
         return self.result_model.predict(obs)
