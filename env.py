@@ -1,7 +1,8 @@
 import numpy as np
 from collections import deque
+import csv
 
-from utils import *
+import config
 from player import Player
 from visualize import Visualizer
 
@@ -15,36 +16,41 @@ class Env:
         self.winning_score = winning_score  # 比赛结束的分数
 
         self.history = []
+        self.log = []
 
         self.scored_player = 0
 
     def reset(self, serve_player=0):
         self.current_player = serve_player
 
-        player0_pos = 5
-        player1_pos = 5
-        ball_pos = 5
+        self.center = 4
+
+        player0_pos = self.center
+        player1_pos = self.center
+        ball_pos = self.center
         ball_height = 0
 
         self.state = [player0_pos, player1_pos, ball_pos, ball_height, serve_player]
 
-        self.window_size = WINDOW_SIZE
+        self.window_size = config.WINDOW_SIZE
         self.window = deque(maxlen=self.window_size)
         for i in range(self.window_size):
-            if len(FEATURES) == 5:
-                self.window.append((10, 5, 2, 0, 0))
-            else:
-                self.window.append((10, 5, 2))
+            action = [10, self.center, 2]
+            while len(action) < len(config.FEATURES):
+                action.append(0)
+            self.window.append(action)
 
         return self.state
 
     def step(self, action):
-        _, landing_pos, hit_height, backhand, aroundhead = action
+        ty = config.ACTIONS[action[0]]
+        landing_pos = action[1]
+        hit_height = action[2]
 
         self.window.append(action)
 
-        assert 1 <= hit_height <= 3
-        assert 0 <= landing_pos <= 9
+        assert 0 <= hit_height <= 2
+        assert -1 <= landing_pos <= 8
         player_id = self.current_player
 
         opponent_id = 1 - player_id
@@ -84,9 +90,9 @@ class Env:
                 info['losing_player'] = opponent_id
 
         if player_id == 0:
-            player_positions = [5, landing_pos]
+            player_positions = [self.center, landing_pos]
         else:
-            player_positions = [landing_pos, 5]
+            player_positions = [landing_pos, self.center]
 
         ball_pos = landing_pos
         ball_height = hit_height
@@ -104,6 +110,17 @@ class Env:
             'score_player0': self.score[0],
             'score_player1': self.score[1],
             'failure_reason': result,
+            'losing_player': info['losing_player']
+        })
+
+        self.log.append({
+            'Score_A' : self.score[0],
+            'score_B' : self.score[1],
+            'player': self.current_player,
+            'type': ty,
+            'ball_height': ball_height,
+            'landing_area': landing_pos,
+            'result': result,
             'losing_player': info['losing_player']
         })
 
@@ -127,30 +144,31 @@ class Env:
     def _get_result_model_obs(self, action):
         obs = []
         for i in range(1, self.window_size + 1):
-            for j, feature in enumerate(FEATURES):
+            for j, feature in enumerate(config.FEATURES):
                 if i == 1 and feature == 'landing_area':
                     continue
-                obs += self._one_hot(self.window[-i][j], FEATURE_SIZES[j])
+                obs += self._one_hot(self.window[-i][j], config.FEATURE_SIZES[j])
         return obs
     
     def _get_hit_model_obs(self, action):
         obs = []
         for i in range(1, self.window_size + 1):
-            for j, feature in enumerate(FEATURES):
-                obs += self._one_hot(self.window[-i][j], FEATURE_SIZES[j])
+            for j, feature in enumerate(config.FEATURES):
+                obs += self._one_hot(self.window[-i][j], config.FEATURE_SIZES[j])
         return obs
 
     def _get_act_model_obs(self):
         obs = []
         for i in range(1, self.window_size + 1):
-            for j, feature in enumerate(FEATURES):
-                obs += self._one_hot(self.window[-i][j], FEATURE_SIZES[j])
+            for j, feature in enumerate(config.FEATURES):
+                obs += self._one_hot(self.window[-i][j], config.FEATURE_SIZES[j])
         return obs
 
     def render(self):
         """
         渲染击打过程
         """
+        print(self.history)
         Visualizer.animate(self.history)
 
     def run_episode(self, serve_player=0):
@@ -189,4 +207,9 @@ class Env:
             winner = 0 if self.score[0] > self.score[1] else 1
             scores[winner] += 1
         print(scores)
-        
+    
+    def save_to_csv(self):
+        with open('game_history.csv', 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=self.log[0].keys())
+            writer.writeheader()
+            writer.writerows(self.log)

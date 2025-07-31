@@ -46,8 +46,6 @@ class Visualizer:
             if position == -1:
                 return b_pos
 
-            position -= 1
-
             i, j = position // 3, position % 3
 
             dx = 2.5 / 3
@@ -258,7 +256,7 @@ class Visualizer:
                 action_name = ACTIONS[action_idx] if action_idx < len(ACTIONS) else ACTIONS[-1]
                 screen.blit(FONT.render(f'当前player: {current_state[-1]}', True, WHITE), (info_x, info_y))
                 screen.blit(FONT.render(f'动作类型: {action_name}', True, WHITE), (info_x, info_y + K))
-                screen.blit(FONT.render(f'击球高度: {['低', '中', '高'][action[2] - 1]}', True, WHITE), (info_x, info_y + K * 2))
+                screen.blit(FONT.render(f'击球高度: {['低', '中', '高'][action[2]]}', True, WHITE), (info_x, info_y + K * 2))
                 screen.blit(FONT.render(f'奖励: {reward}', True, WHITE), (info_x, info_y + K * 3))
                 screen.blit(FONT.render(f'比分 - 林丹: {score_player0}  李宗伟: {score_player1}', True, WHITE), (info_x, info_y + K * 4))
 

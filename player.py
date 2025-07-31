@@ -8,11 +8,11 @@ class Player:
     def __init__(self, player_id):
         self.player_id = player_id  # 0或1
         
-    def serve(self, obs) -> tuple:
+    def serve(self, obs) -> list:
         """生成发球动作，返回 (shot_type, landing_pos, height)"""
         raise NotImplementedError
 
-    def generate_shot(self, obs) -> tuple:
+    def generate_shot(self, obs) -> list:
         """生成击球动作"""
         raise NotImplementedError
 
@@ -29,13 +29,13 @@ class SamplePlayer(Player):
     def __init__(self, player_id):
         self.player_id = player_id
         
-    def serve(self, obs) -> tuple:
-        return (0, 4, 1)
+    def serve(self, obs):
+        return [0, 4, 1]
 
     def generate_shot(self, obs):
         shot_type = random.randint(1, 9)
         target = random.randint(1, 9)
-        return (shot_type, target, 2)
+        return [shot_type, target, 2]
     
     def result(self, obs):
         return random.choices(
@@ -59,59 +59,33 @@ class DLPlayer(Player):
         self.result_model = result_model
         self.defense_model = defense_model
         self.act_model = act_model
-        # self.load()
         self.result_model.eval()
         self.defense_model.eval()
         self.act_model.eval()
 
-    # def load(self):
-    #     self.result_model.load_state_dict(torch.load('result_model.pth'))
+    def serve(self, obs):
+        action = self.act_model.predict(obs)
+        if action[0] != 0:
+            action[0] = 0  # 保证类型为发球
+        if action[1] % 3 == 2:
+            action[1] -= 1  # 保证区域合法
+        return action
 
-    #     self.defense_model.load_state_dict(torch.load('defense_model.pth'))
+    def generate_shot(self, obs):
+        action = self.act_model.predict(obs)
+        if action[0] == 0:
+            action[0] = 6  # 保证类型不为发球
 
-    #     self.act_model.load_state_dict(torch.load('act_model.pth'))
-
-    def serve(self, obs) -> tuple:
-        ty, landing_pos, hit_height, backhand, aroundhead = self.act_model.predict(obs)
-        return (0, landing_pos + 1, hit_height + 1, backhand, aroundhead)
-
-    def generate_shot(self, obs) -> tuple:
-        ty, landing_pos, hit_height, backhand, aroundhead = self.act_model.predict(obs)
-        if ty == 0:
-            ty = 6
-        return (ty, landing_pos + 1, hit_height + 1, backhand, aroundhead)
+        if action[0] == 2 and action[1] in [0, 1, 2]:
+            action[1] += 3
+        if action[0] in [3, 7, 8] and action[1] in [6, 7, 8]:
+            action[1] -= 3
+        if action[0] in [1, 2] and action[2] in [0, 1]:
+            action[2] += 1
+        return action
 
     def result(self, obs):
         return self.result_model.predict(obs)
 
     def hit(self, obs):
         return self.defense_model.predict(obs)
-
-class GreedyPlayer(DLPlayer):
-    def __init__(self, player_id, result_model, defense_model, act_model):
-        super().__init__(player_id, result_model, defense_model, act_model)
-
-    def generate_shot(self, state) -> tuple:
-        max_prob = 0
-        for ty in range(10):
-            for landing_pos_idx in range(9):
-                for hit_height in range(3):
-                    action = (ty, landing_pos_idx + 1, hit_height + 1)
-
-                    obs = state.copy()
-                    obs.append(action[0])
-                    obs.append(action[1])
-
-                    obs = torch.FloatTensor(obs).unsqueeze(0)
-
-                    with torch.no_grad():
-                        logits = self.result_model(obs)
-                        probs = F.softmax(logits, dim=1)
-                        prob = probs[0][0].item()
-
-                    if prob > max_prob:
-                        max_prob = prob
-                        final_action = action
-        # print('max_prob:', max_prob)
-        # print('action:', final_action)
-        return final_action

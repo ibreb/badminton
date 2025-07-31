@@ -7,7 +7,7 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 from torch.utils.data import TensorDataset, DataLoader, random_split
 
-from utils import *
+import config
 from env import Env
 from player import Player
 from models import ResultModel, DefenseModel, ActModel
@@ -24,7 +24,7 @@ class RecordPlayer(Player):
         self.shot_types = []
         self.landing_positions = []
         self.heights = []
-        self.action_times = [[] for _ in range(len(ACTIONS))]
+        self.action_times = [[] for _ in range(len(config.ACTIONS))]
 
     def load(self, file_path):
         actions = []
@@ -41,7 +41,6 @@ class RecordPlayer(Player):
             if self.end_reason == '落地':
                 self.end_reason = '击球落地'
             if self.end_reason == '其他原因':
-                # print('对局结果：其他原因')
                 self.end_reason = '击球落地'
             if self.end_reason not in ['下网', '击球落地', '出界']:
                 return False
@@ -50,7 +49,7 @@ class RecordPlayer(Player):
                 if not row.get('player') or not row['player'].strip():
                     continue
                 
-                ty = ACTIONS.index(row['type'])
+                ty = config.ACTIONS.index(row['type'])
                 
                 landing_area = int(row['landing_area'])
                 
@@ -75,7 +74,7 @@ class RecordPlayer(Player):
                 player = str(row['player'])
                 self.players.append(player)
                 
-                actions.append((ty, landing_area, height, backhand, aroundhead))
+                actions.append((ty, landing_area - 1, height - 1, backhand, aroundhead))
 
                 time_str = rows[i + 1]['time']
                 h, m, s = time_str.split(':')
@@ -117,22 +116,22 @@ class RecordPlayer(Player):
         if self.players[self.idx] == target_player:
             self.act_obs.append(obs)
             self.shot_types.append(action[0])
-            self.landing_positions.append(action[1] - 1)
-            self.heights.append(action[2] - 1)
+            self.landing_positions.append(action[1])
+            self.heights.append(action[2])
         self.idx += 1
         return action
 
     def generate_shot(self, obs):
         action = self.actions[self.idx]
-        if action[2] == 0:
-            action = (action[0], action[1], 1, actions[3], action[4])
+        if action[2] == -1:
+            action = (action[0], action[1], 0, actions[3], action[4])
         # print(action)
         if action[1] > 0:
             if self.players[self.idx] == target_player:
                 self.act_obs.append(obs)
                 self.shot_types.append(action[0])
-                self.landing_positions.append(action[1] - 1)
-                self.heights.append(action[2] - 1)
+                self.landing_positions.append(action[1])
+                self.heights.append(action[2])
         self.idx += 1
         return action
 
@@ -150,32 +149,23 @@ def plot_losses(train_losses, test_losses, title, y_max=None):
     plt.grid(True)
 
 
-    plt.savefig(f'{title.lower().replace(" ", "_")}.png')
+    plt.savefig(f'{title.lower().replace(' ', '_')}.png')
     plt.close()
 
-
-if __name__ == "__main__":
-    target_player = '林丹'
-
-    path = Path('羽毛球关键帧')
+def parse_data():
+    path = Path('h1')
     replayPlayer = RecordPlayer()
     for csv_file in path.rglob('*.csv'):
         if not replayPlayer.load(csv_file):
-            print('skipping ', csv_file)
+            # print('skipping ', csv_file)
             continue
         env = Env(replayPlayer, replayPlayer)
         state = env.reset(0)
         env.run_episode()
+    return replayPlayer
 
 
-    # D = []
-    # for i, action in enumerate(ACTIONS):
-    #     D.append(np.mean(replayPlayer.action_times[i]))
-    #     print(f"{action}: {np.mean(replayPlayer.action_times[i]):4f}")
-    # print(D)
-    # quit()
-
-
+def train(replayPlayer, train_name):
     # ResultModel训练
     model = ResultModel()
     criterion = nn.CrossEntropyLoss()
@@ -185,14 +175,17 @@ if __name__ == "__main__":
     labels_tensor = torch.tensor(replayPlayer.labels, dtype=torch.long)
     
     dataset = TensorDataset(obs_tensor, labels_tensor)
+
+    generator = torch.Generator()
+    generator.manual_seed(42)
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size], generator=generator)
     
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=64)
     
-    num_epochs = 50
+    num_epochs = 30
     train_losses, test_losses = [], []
     
     for epoch in range(num_epochs + 1):
@@ -227,15 +220,12 @@ if __name__ == "__main__":
                 loss = criterion(outputs, targets)
                 train_loss += loss.item() * inputs.size(0)
         
-        # 记录损失
         train_losses.append(train_loss / len(train_loader.dataset))
         test_losses.append(test_loss / len(test_loader.dataset))
         
-        print(f'Epoch {epoch+1}, Train Loss: {train_losses[-1]:.4f}, Test Loss: {test_losses[-1]:.4f}')
+        # print(f'Epoch {epoch+1}, Train Loss: {train_losses[-1]:.4f}, Test Loss: {test_losses[-1]:.4f}')
     
-    # 保存模型和绘图
-    torch.save(model.state_dict(), f'result_model_{target_player}.pth')
-    plot_losses(train_losses, test_losses, 'Result_Model_Loss', y_max=0.4)
+    torch.save(model.state_dict(), f'models/result_model_{train_name}.pth')
 
     # DefenseModel训练
     model = DefenseModel()
@@ -246,14 +236,16 @@ if __name__ == "__main__":
     labels_tensor = torch.tensor(replayPlayer.hit_res, dtype=torch.float32).unsqueeze(1)
     
     dataset = TensorDataset(obs_tensor, labels_tensor)
+    generator = torch.Generator()
+    generator.manual_seed(42)
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size], generator=generator)
     
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=64)
     
-    num_epochs = 50
+    num_epochs = 30
     train_losses, test_losses = [], []
     
     for epoch in range(num_epochs + 1):
@@ -263,6 +255,8 @@ if __name__ == "__main__":
             epoch_loss = 0.0
             for inputs, targets in train_loader:
                 outputs = model(inputs)
+                # for o in outputs:
+                    # assert epoch <= 2 or o >= 0.5
                 loss = criterion(outputs, targets)
                 
                 optimizer.zero_grad()
@@ -290,119 +284,19 @@ if __name__ == "__main__":
                 loss = criterion(outputs, targets)
                 train_loss += loss.item() * inputs.size(0)
         
-        # 记录损失
         train_losses.append(train_loss / len(train_loader.dataset))
         test_losses.append(test_loss / len(test_loader.dataset))
         
-        print(f'Epoch {epoch+1}, Train Loss: {train_losses[-1]:.4f}, Test Loss: {test_losses[-1]:.4f}')
+        # print(f'Epoch {epoch+1}, Train Loss: {train_losses[-1]:.4f}, Test Loss: {test_losses[-1]:.4f}')
     
-    # 保存模型和绘图
-    torch.save(model.state_dict(), f'defense_model_{target_player}.pth')
-    plot_losses(train_losses, test_losses, 'Defense_Model_Loss', y_max=0.3)
+    torch.save(model.state_dict(), f'models/defense_model_{train_name}.pth')
 
-    # # ActModel训练
-    # model = ActModel()
-    # criterion = nn.CrossEntropyLoss()
-    # optimizer = torch.optim.Adam(model.parameters(), lr=0.0003)
-    
-    # # print(replayPlayer.act_obs)
-    # obs_tensor = torch.tensor(replayPlayer.act_obs, dtype=torch.float32)
-    # shot_tensor = torch.tensor(replayPlayer.shot_types, dtype=torch.long)
-    # land_tensor = torch.tensor(replayPlayer.landing_positions, dtype=torch.long)
-    # height_tensor = torch.tensor(replayPlayer.heights, dtype=torch.long)
-    
-    # dataset = TensorDataset(obs_tensor, shot_tensor, land_tensor, height_tensor)
-    # train_size = int(0.8 * len(dataset))
-    # test_size = len(dataset) - train_size
-    # train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-    
-    # train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    # test_loader = DataLoader(test_dataset, batch_size=64)
-    
-    # num_epochs = 50
-    # train_losses, test_losses = [], []
-    
-    # for epoch in range(num_epochs + 1):
-    #     # 训练阶段
-    #     if epoch > 0:
-    #         model.train()
-    #         epoch_loss = 0.0
-    #         for obs, shot, land, height in train_loader:
-    #             shot_logits, land_logits, height_logits = model(obs, shot)
-    #             loss = criterion(shot_logits, shot) + criterion(land_logits, land) + criterion(height_logits, height)
-                
-    #             optimizer.zero_grad()
-    #             loss.backward()
-    #             optimizer.step()
-                
-    #             epoch_loss += loss.item() * obs.size(0)
-        
-    #     # 测试阶段
-    #     model.eval()
-    #     test_loss = 0.0
-    #     with torch.no_grad():
-    #         for obs, shot, land, height in test_loader:
-    #             shot_logits, land_logits, height_logits = model(obs, shot)
-    #             loss = criterion(shot_logits, shot) + criterion(land_logits, land) + criterion(height_logits, height)
-    #             test_loss += loss.item() * obs.size(0)
-
-    #     train_loss = 0.0
-    #     with torch.no_grad():
-    #         for obs, shot, land, height in train_loader:
-    #             shot_logits, land_logits, height_logits = model(obs, shot)
-    #             loss = criterion(shot_logits, shot) + criterion(land_logits, land) + criterion(height_logits, height)
-    #             train_loss += loss.item() * obs.size(0)
-        
-    #     # 记录损失
-    #     train_losses.append(train_loss / len(train_loader.dataset))
-    #     test_losses.append(test_loss / len(test_loader.dataset))
-        
-    #     print(f'Epoch {epoch+1}, Train Loss: {train_losses[-1]:.4f}, Test Loss: {test_losses[-1]:.4f}')
-    
-    # # 测试评估
-    # model.eval()
-    # correct_top1 = 0
-    # correct_top2 = 0
-    # correct_top3 = 0
-    # correct_top4 = 0
-    # total = 0
-    # with torch.no_grad():
-    #     for obs, shot, land, height in test_loader:
-    #         shot_logits, land_logits, _ = model(obs, shot)
-
-    #         topk_shot = torch.topk(land_logits, k=4, dim=1).indices
-
-    #         # Top-1 Accuracy
-    #         top1_preds = topk_shot[:, 0]
-    #         correct_top1 += (land == top1_preds).sum().item()
-
-    #         # Top-2 Accuracy
-    #         top2_preds = topk_shot[:, :2]
-    #         correct_top2 += (land.unsqueeze(1) == top2_preds).any(dim=1).sum().item()
-
-    #         # Top-3 Accuracy
-    #         top3_preds = topk_shot[:, :3]
-    #         correct_top3 += (land.unsqueeze(1) == top3_preds).any(dim=1).sum().item()
-
-    #         # Top-4 Accuracy
-    #         correct_top4 += (land.unsqueeze(1) == topk_shot).any(dim=1).sum().item()
-    #         total += obs.size(0)
-    
-    # print(f'ActModel Test Accuracy: Top1={correct_top1 / total:.4f}, '
-    #   f'Top2={correct_top2 / total:.4f}, '
-    #   f'Top3={correct_top3 / total:.4f},'
-    #   f'Top4={correct_top4 / total:.4f}'
-    #   )
-    
-    # # 保存模型和绘图
-    # torch.save(model.state_dict(), f'act_model_{target_player}.pth')
-    # plot_losses(train_losses, test_losses, 'Act_Model_Loss')
     def train_act_model(replayPlayer, num_runs=5):
         
         all_top1, all_top2, all_top3, all_top4 = [], [], [], []
 
         for run in range(num_runs):
-            print(f"\n=== Run {run + 1}/{num_runs} ===")
+            # print(f'\n=== Run {run + 1}/{num_runs} ===')
 
             # 每次重新初始化模型和优化器
             model = ActModel()
@@ -416,20 +310,27 @@ if __name__ == "__main__":
             height_tensor = torch.tensor(replayPlayer.heights, dtype=torch.long)
 
             dataset = TensorDataset(obs_tensor, shot_tensor, land_tensor, height_tensor)
+            generator = torch.Generator()
+            generator.manual_seed(42)
             train_size = int(0.8 * len(dataset))
             test_size = len(dataset) - train_size
-            train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+            train_dataset, test_dataset = random_split(dataset, [train_size, test_size], generator=generator)
 
             train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
             test_loader = DataLoader(test_dataset, batch_size=64)
 
-            num_epochs = 50
+            num_epochs = 30
 
             for epoch in range(1, num_epochs + 1):
                 model.train()
                 epoch_loss = 0.0
                 for obs, shot, land, height in train_loader:
-                    shot_logits, land_logits, height_logits, backhand_logits, aroundhead_logits = model(obs, shot)
+                    if 'aroundhead' in config.FEATURES:
+                        shot_logits, land_logits, height_logits, backhand_logits, aroundhead_logits = model(obs, shot)
+                    elif 'backhand' in config.FEATURES:
+                        shot_logits, land_logits, height_logits, backhand_logits = model(obs, shot)
+                    else:
+                        shot_logits, land_logits, height_logits = model(obs, shot)
                     loss = criterion(shot_logits, shot) + criterion(land_logits, land) + criterion(height_logits, height)
 
                     optimizer.zero_grad()
@@ -437,10 +338,6 @@ if __name__ == "__main__":
                     optimizer.step()
 
                     epoch_loss += loss.item() * obs.size(0)
-
-                # 可选：打印训练过程
-                # if epoch % 10 == 0:
-                #     print(f"Epoch {epoch}, Loss: {epoch_loss / len(train_loader.dataset):.4f}")
 
             # 测试评估
             model.eval()
@@ -452,7 +349,26 @@ if __name__ == "__main__":
 
             with torch.no_grad():
                 for obs, shot, land, height in test_loader:
-                    shot_logits, land_logits, height_logits, backhand_logits, aroundhead_logits = model(obs, shot)
+                    # shot_logits, land_logits, height_logits, backhand_logits, aroundhead_logits = model(obs, shot)
+                    # topk_shot = torch.topk(shot_logits, k=4, dim=1).indices
+
+                    # top1_preds = topk_shot[:, 0]
+                    # correct_top1 += (shot == top1_preds).sum().item()
+
+                    # top2_preds = topk_shot[:, :2]
+                    # correct_top2 += (shot.unsqueeze(1) == top2_preds).any(dim=1).sum().item()
+
+                    # top3_preds = topk_shot[:, :3]
+                    # correct_top3 += (shot.unsqueeze(1) == top3_preds).any(dim=1).sum().item()
+
+                    # correct_top4 += (shot.unsqueeze(1) == topk_shot).any(dim=1).sum().item()
+                    # total += obs.size(0)
+                    if 'aroundhead' in config.FEATURES:
+                        shot_logits, land_logits, height_logits, backhand_logits, aroundhead_logits = model(obs, shot)
+                    elif 'backhand' in config.FEATURES:
+                        shot_logits, land_logits, height_logits, backhand_logits = model(obs, shot)
+                    else:
+                        shot_logits, land_logits, height_logits = model(obs, shot)
                     topk_shot = torch.topk(land_logits, k=4, dim=1).indices
 
                     top1_preds = topk_shot[:, 0]
@@ -477,21 +393,53 @@ if __name__ == "__main__":
             all_top3.append(top3_acc)
             all_top4.append(top4_acc)
 
-            print(f'Run {run+1} Accuracy: Top1={top1_acc:.4f}, Top2={top2_acc:.4f}, Top3={top3_acc:.4f}, Top4={top4_acc:.4f}')
+            # print(f'Run {run+1} Accuracy: Top1={top1_acc:.4f}, Top2={top2_acc:.4f}, Top3={top3_acc:.4f}, Top4={top4_acc:.4f}')
 
         # 输出平均准确率
-        print("\n=== Final Average Accuracy ===")
-        print(f"Top1: {np.mean(all_top1):.4f} ± {np.std(all_top1):.4f}")
-        print(f"Top2: {np.mean(all_top2):.4f} ± {np.std(all_top2):.4f}")
-        print(f"Top3: {np.mean(all_top3):.4f} ± {np.std(all_top3):.4f}")
-        print(f"Top4: {np.mean(all_top4):.4f} ± {np.std(all_top4):.4f}")
+        # print('\n=== Final Average Accuracy ===')
+        print(f'Top1: {np.mean(all_top1):.4f} Top2: {np.mean(all_top2):.4f} Top3: {np.mean(all_top3):.4f} Top4: {np.mean(all_top4):.4f}')
+        # print(f'Top2: {np.mean(all_top2):.4f} ± {np.std(all_top2):.4f}')
+        # print(f'Top3: {np.mean(all_top3):.4f} ± {np.std(all_top3):.4f}')
+        # print(f'Top4: {np.mean(all_top4):.4f} ± {np.std(all_top4):.4f}')
 
-        torch.save(model.state_dict(), f'act_model_{target_player}.pth')
+        torch.save(model.state_dict(), f'models/act_model_{train_name}.pth')
 
         return all_top1, all_top2, all_top3, all_top4
 
-    # 调用函数
-    top1_list, top2_list, top3_list, top4_list = train_act_model(replayPlayer, num_runs=1)
+    top1_list, top2_list, top3_list, top4_list = train_act_model(replayPlayer)
 
+if __name__ == '__main__':
+    
+    '''生成所有配置组合'''
+    base_actions = ['发球', '扣杀', '高远球', '网前吊球', '吊球', '平抽球', '挑球', '扑球', '挡网', '切球']
+    base_features = ['type', 'landing_area', 'ball_height', 'backhand', 'aroundhead']
+    base_feature_sizes = [10, 9, 3, 2, 2]
+        
+    for window_size in [1, 2, 3, 4, 5]:
+        for feature_count in [3, 4, 5]:
+            selected_features = base_features[:feature_count]
+            selected_sizes = base_feature_sizes[:feature_count]
+            
+            feature_dim = sum(selected_sizes)
+            obs_dim_result = feature_dim * window_size - 9
+            obs_dim_defense = feature_dim * window_size
+            obs_dim_act = feature_dim * window_size
+            
+            config_name = f'w{window_size}_f{feature_count}'
+            print(config_name)
+            curr_config = {
+                'actions': base_actions,
+                'features': selected_features,
+                'feature_sizes': selected_sizes,
+                'obs_dim': {
+                    'result_model': obs_dim_result,
+                    'defense_model': obs_dim_defense,
+                    'act_model': obs_dim_act
+                },
+                'window_size': window_size
+            }
 
-    # plot_losses(train_losses, test_losses, 'Defense_Model_Loss', y_max=0.3)
+            config.load_config(curr_config)
+            target_player = '李宗伟'
+            replayPlayer = parse_data()
+            train(replayPlayer, config_name + 'h1_' + target_player)
